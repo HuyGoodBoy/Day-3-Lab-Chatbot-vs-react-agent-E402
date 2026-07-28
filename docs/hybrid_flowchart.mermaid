@@ -1,0 +1,50 @@
+%% 📊 HYBRID DECISION FLOWCHART
+%% Chủ đề: Trợ Lý Sàng Lọc Hồ Sơ Tuyển Dụng & Hẹn Phỏng Vấn
+%% Quyết định khi nào đi Chatbot path (nhanh/rẻ) và khi nào đi ReAct Agent path (cần Tool/dữ liệu thật)
+
+flowchart TD
+    A([Người dùng đặt câu hỏi]) --> B{"Query Router:<br/>Phân loại độ phức tạp"}
+
+    %% ===== Nhánh CHATBOT PATH =====
+    B -->|"Câu hỏi ĐƠN GIẢN<br/>(hỏi thông tin chung,<br/>không cần dữ liệu thực tế/tool)"| C[["CHATBOT BASELINE PATH<br/>run_baseline_chatbot()"]]
+    C --> C1[Gọi LLM với<br/>CHATBOT_BASELINE_PROMPT<br/>không có Tools]
+    C1 --> C2{LLM có đủ kiến thức<br/>để trả lời không?}
+    C2 -->|Có| Z([Trả lời trực tiếp cho user])
+    C2 -->|"Không<br/>(có thể bị ảo giác/<br/>không có dữ liệu real-time)"| C3[/"⚠️ Cảnh báo: Hallucination Risk<br/>Đề xuất chuyển sang ReAct Agent"/]
+    C3 --> B
+
+    %% ===== Nhánh REACT AGENT PATH =====
+    B -->|"Câu hỏi PHỨC TẠP<br/>(multi-step, cần tra cứu/<br/>hành động thực tế, câu bẫy)"| D[["REACT AGENT PATH<br/>run_react_agent()"]]
+    D --> D1[Khởi tạo vòng lặp<br/>iteration = 0]
+    D1 --> D2["Thought:<br/>LLM suy luận bước tiếp theo"]
+    D2 --> D3{"Có cần gọi Tool<br/>(Action) không?"}
+
+    D3 -->|Không, đã đủ thông tin| E[Final Answer]
+
+    D3 -->|Có| D4{"Tool có tồn tại<br/>trong AVAILABLE_TOOLS?"}
+    D4 -->|Không| D5["Observation: LỖI -<br/>Tool không tồn tại"]
+    D4 -->|Có| D6["Action: Gọi Tool<br/>(screen_resume /<br/>check_interviewer_availability /<br/>schedule_interview)"]
+    D6 --> D7["Observation:<br/>Kết quả trả về từ Tool"]
+
+    D5 --> D8
+    D7 --> D8{"Observation chứa<br/>'LỖI:' hoặc<br/>'KHÔNG ĐẠT'?"}
+    D8 -->|Có| D9["🛡️ Guardrail:<br/>Ghi nhận lỗi vào lịch sử,<br/>chuẩn bị kết luận an toàn"]
+    D8 -->|Không| D10[Lưu Thought-Action-Observation<br/>vào conversation_history]
+
+    D9 --> D11
+    D10 --> D11{"iteration < MAX_ITERATIONS?<br/>(giới hạn = 5)"}
+    D11 -->|Có, tăng iteration| D2
+    D11 -->|"Không<br/>(vượt quá 5 vòng lặp)"| F["🛑 SAFE_FALLBACK_MESSAGE<br/>(Guardrail chặn lặp vô tận)"]
+
+    E --> Z2([Trả lời trực tiếp cho user])
+    F --> Z2
+
+    style B fill:#fff3cd,stroke:#333,stroke-width:2px
+    style C fill:#d4edda,stroke:#333
+    style D fill:#cce5ff,stroke:#333
+    style D9 fill:#f8d7da,stroke:#a94442
+    style F fill:#f8d7da,stroke:#a94442
+    style C3 fill:#fff3cd,stroke:#856404
+    style Z fill:#e2e3e5,stroke:#333
+    style Z2 fill:#e2e3e5,stroke:#333
+
