@@ -67,39 +67,212 @@ def run_react_agent(user_query: str, provider):
     """
     Dựng vòng lặp ReAct Agent (Thought -> Action -> Observation) có Guardrails.
     
-    NOTE: Đây là phiên bản demo cho Mốc 2. Phiên bản đầy đủ sẽ được implement ở Mốc 4.
+    Returns:
+        dict: {'question': str, 'response': str, 'trace': list}
     """
-    print(f"\n[REACT AGENT] Cau hoi: {user_query}")
+    print(f"\n{'='*60}")
+    print(f"[REACT AGENT] Processing Query")
+    print(f"{'='*60}")
+    print(f"Cau hoi: {user_query}")
+    print(f"{'-'*60}")
     
-    # Tạo conversation context cho ReAct
     conversation_history = []
+    iteration = 0
+    trace = []
     
-    # Build prompt với system prompt ReAct
-    prompt = REACT_SYSTEM_PROMPT + f"\n\nCâu hỏi: {user_query}"
+    while iteration < MAX_ITERATIONS:
+        iteration += 1
+        print(f"\n--- Vong lap #{iteration} ---")
+        
+        # Build prompt
+        prompt = REACT_SYSTEM_PROMPT + "\n\n"
+        prompt += f"Câu hỏi: {user_query}\n\n"
+        
+        if conversation_history:
+            prompt += "Lịch sử hội thoại:\n" + "\n".join(conversation_history) + "\n\n"
+        
+        prompt += "Hãy phân tích và hành động (Thought -> Action -> Final Answer):"
+        
+        # Call LLM
+        response = provider.generate(prompt, system_prompt="")
+        print(f"LLM Response:\n{response}")
+        
+        # Parse tool call from response
+        tool_name, tool_args = parse_tool_call(response)
+        
+        if tool_name is None:
+            # No tool call - LLM gave final answer
+            print("Ket luan: LLM khong goi tool nao, tra loi truc tiep")
+            conversation_history.append(f"LLM: {response}")
+            trace.append({
+                "iteration": iteration,
+                "thought": extract_thought(response),
+                "action": None,
+                "observation": None,
+                "final": True
+            })
+            break
+        
+        # Execute tool
+        if tool_name not in AVAILABLE_TOOLS:
+            observation = f"LỖI: Tool '{tool_name}' không tồn tại. Các tool khả dụng: {', '.join(AVAILABLE_TOOLS.keys())}"
+        else:
+            print(f"\n>>> Goi tool: {tool_name}({tool_args})")
+            tool_func = AVAILABLE_TOOLS[tool_name]
+            observation = tool_func(**tool_args)
+        
+        print(f"Observation: {observation}")
+        
+        # Add to history
+        conversation_history.append(f"Thought: {extract_thought(response)}")
+        conversation_history.append(f"Action: {tool_name}({tool_args})")
+        conversation_history.append(f"Observation: {observation}")
+        
+        trace.append({
+            "iteration": iteration,
+            "thought": extract_thought(response),
+            "action": f"{tool_name}({tool_args})",
+            "observation": observation,
+            "final": False
+        })
+        
+        # Check if we should stop (tool returned critical error or "khong tim thay")
+        if "KHÔNG ĐẠT" in observation or "LỖI:" in observation:
+            print("Phat hien ket qua tu tool, chuan bi ket luan cuoi...")
     
-    # Thêm conversation history nếu có
-    if conversation_history:
-        prompt += "\n\nLịch sử hội thoại:\n" + "\n".join(conversation_history)
-    
-    prompt += "\n\nHãy suy nghĩ và hành động:"
-    
-    # Goi LLM de phan tich
-    print("\n--- Buoc 1: Goi LLM phan tich cau hoi ---")
-    response = provider.generate(prompt, system_prompt="")
-    
-    # Demo: Hien thi response va chay thu mot tool
-    print(f"\nLLM Response:\n{response}")
-    
-    # Demo voi tool screen_resume cho test case #3
-    if "Nguyen Van A" in user_query and "Data Engineer" in user_query:
-        print("\n--- Demo: Goi tool screen_resume ---")
-        obs = screen_resume("Nguyen Van A", "Data Engineer")
-        print(f"Observation: {obs}")
-        conversation_history.append(f"Observation: {obs}")
+    # Get final answer from LLM with all observations
+    if iteration >= MAX_ITERATIONS:
+        final_response = SAFE_FALLBACK_MESSAGE
+    else:
+        final_prompt = REACT_SYSTEM_PROMPT + "\n\n"
+        final_prompt += f"Câu hỏi: {user_query}\n\n"
+        final_prompt += "Lịch sử:\n" + "\n".join(conversation_history) + "\n\n"
+        final_prompt += "Dua tren cac thong tin, hay dua ra ket luan cuoi cung (Final Answer):"
+        final_response = provider.generate(final_prompt, system_prompt="")
     
     print(f"\n{'='*60}")
-    print("Ghi chu: ReAct Agent day du se duoc implement o Moc 4")
+    print(f"Final Answer:\n{final_response}")
     print(f"{'='*60}")
+    
+    return {
+        "question": user_query,
+        "response": final_response,
+        "trace": trace
+    }
+
+
+def parse_tool_call(response: str):
+    """
+    Parse tool call from LLM response.
+    Supports formats: Action: tool_name[arg1, arg2] or Action: tool_name({"arg1": "value1"})
+    
+    Returns:
+        tuple: (tool_name, kwargs_dict) or (None, None) if no tool call
+    """
+    import re
+    
+    # Pattern 1: Action: tool_name[...]
+    pattern1 = r'Action:\s*(\w+)\[([^\]]+)\]'
+    match = re.search(pattern1, response, re.IGNORECASE)
+    
+    if match:
+        tool_name = match.group(1)
+        args_str = match.group(2)
+        
+        # Try to parse arguments
+        args = parse_arguments(args_str)
+        if args:
+            return tool_name, args
+    
+    # Pattern 2: tool_name({...})
+    pattern2 = r'(\w+)\(\{[^}]+\}\)'
+    match = re.search(pattern2, response)
+    
+    if match:
+        tool_name = match.group(1)
+        # Try JSON style
+        json_pattern = r'(\w+)\(\{([^}]+)\}\)'
+        match = re.search(json_pattern, response)
+        if match:
+            args = parse_json_arguments(match.group(2))
+            if args:
+                return tool_name, args
+    
+    return None, None
+
+
+def parse_arguments(args_str: str) -> dict:
+    """Parse tool arguments from string format."""
+    import re
+    args = {}
+    
+    # Try: "name1", "value1", "name2", "value2"
+    pattern = r'["\']([^"\']+)["\']\s*,\s*["\']([^"\']+)["\']'
+    matches = re.findall(pattern, args_str)
+    
+    if len(matches) >= 2:
+        for name, value in matches[:4]:  # Max 4 args
+            # Map common names to parameter names
+            if 'candidate' in name.lower():
+                args['candidate_name'] = value
+            elif 'position' in name.lower():
+                args['position'] = value
+            elif 'interviewer' in name.lower():
+                args['interviewer'] = value
+            elif 'date' in name.lower():
+                args['date'] = value
+            elif 'time' in name.lower():
+                args['time'] = value
+    
+    # If still empty, try positional
+    if not args:
+        parts = [p.strip().strip('"\'') for p in args_str.split(',')]
+        if len(parts) >= 2:
+            if 'screen' in args_str.lower():
+                args['candidate_name'] = parts[0]
+                args['position'] = parts[1]
+            elif 'check' in args_str.lower():
+                args['interviewer'] = parts[0]
+                args['date'] = parts[1]
+            elif 'schedule' in args_str.lower():
+                args['candidate_name'] = parts[0]
+                args['interviewer'] = parts[1]
+                args['date'] = parts[2]
+                args['time'] = parts[3] if len(parts) > 3 else "09:00"
+    
+    return args
+
+
+def parse_json_arguments(args_str: str) -> dict:
+    """Parse tool arguments from JSON-like string."""
+    import re
+    args = {}
+    
+    # Match "name": "value" patterns
+    pattern = r'["\'](\w+)["\']\s*:\s*["\']([^"\']+)["\']'
+    matches = re.findall(pattern, args_str)
+    
+    for name, value in matches:
+        if name in ['candidate_name', 'candidate', 'name', 'interviewer', 'date', 'time', 'position']:
+            args[name] = value
+    
+    return args
+
+
+def extract_thought(response: str) -> str:
+    """Extract Thought section from LLM response."""
+    import re
+    
+    # Look for Thought: ... (until Action: or Final Answer)
+    pattern = r'Thought:\s*(.+?)(?=Action:|Final Answer:|$)'
+    match = re.search(pattern, response, re.DOTALL | re.IGNORECASE)
+    
+    if match:
+        thought = match.group(1).strip()
+        return thought[:500]  # Limit length
+    
+    # Fallback: first 200 chars
+    return response[:200].strip()
 
 
 if __name__ == "__main__":
@@ -147,12 +320,44 @@ if __name__ == "__main__":
     print(f"\nHoan thanh Moc 2! Role 5 can ghi ket qua vao docs/trace_eval.md")
     
     # ====================================================================
-    # DEMO: REACT AGENT (se hoan thien o Moc 4)
+    # DEMO: REACT AGENT - Chay tat ca test cases
     # ====================================================================
     print("\n" + "="*60)
-    print("DEMO: REACT AGENT (Chay thu Test Case #3)")
+    print("DEMO: REACT AGENT (Chay tat ca test cases)")
     print("="*60 + "\n")
     
-    # Chay ReAct Agent demo
-    sample_query = tests[2]["question"]
-    run_react_agent(sample_query, provider)
+    react_results = []
+    
+    for i, test in enumerate(tests):
+        # Skip test case 5 for ReAct demo (it's edge case)
+        if test['id'] == 5:
+            print(f"\nTest Case #{test['id']} - [{test['category']}] - Skip for ReAct demo")
+            continue
+            
+        print(f"\n{'='*60}")
+        print(f"Test Case #{test['id']} - [{test['category']}]")
+        print(f"{'='*60}")
+        
+        result = run_react_agent(test["question"], provider)
+        react_results.append({
+            "id": test["id"],
+            "category": test["category"],
+            "question": test["question"],
+            "response": result["response"],
+            "trace": result["trace"],
+        })
+    
+    # Tom tat ket qua ReAct
+    print("\n" + "="*60)
+    print("TOM TAT KET QUA REACT AGENT")
+    print("="*60)
+    for r in react_results:
+        print(f"\n  Test #{r['id']}: {r['category']}")
+        for step in r['trace']:
+            if step['action']:
+                print(f"    - Iter {step['iteration']}: {step['action']} -> {'OK' if 'LỖI' not in str(step.get('observation', '')) else 'LỖI'}")
+            else:
+                print(f"    - Iter {step['iteration']}: Final Answer")
+    
+    print(f"\nHoan thanh ReAct Agent Demo!")
+    print(f"Vui long xem trace_eval.md de ghi nhan ket qua.")
