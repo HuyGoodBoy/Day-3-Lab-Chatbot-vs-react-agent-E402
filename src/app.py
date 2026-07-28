@@ -171,74 +171,68 @@ def parse_tool_call(response: str):
     """
     import re
     
-    # Pattern 1: Action: tool_name[...]
-    pattern1 = r'Action:\s*(\w+)\[([^\]]+)\]'
-    match = re.search(pattern1, response, re.IGNORECASE)
+    # Look for Action: tool_name[args]
+    pattern = r'Action:\s*(\w+)\[([^\]]+)\]'
+    match = re.search(pattern, response, re.IGNORECASE)
     
     if match:
         tool_name = match.group(1)
         args_str = match.group(2)
-        
-        # Try to parse arguments
-        args = parse_arguments(args_str)
+        args = parse_arguments(args_str, tool_name)
         if args:
             return tool_name, args
-    
-    # Pattern 2: tool_name({...})
-    pattern2 = r'(\w+)\(\{[^}]+\}\)'
-    match = re.search(pattern2, response)
-    
-    if match:
-        tool_name = match.group(1)
-        # Try JSON style
-        json_pattern = r'(\w+)\(\{([^}]+)\}\)'
-        match = re.search(json_pattern, response)
-        if match:
-            args = parse_json_arguments(match.group(2))
-            if args:
-                return tool_name, args
     
     return None, None
 
 
-def parse_arguments(args_str: str) -> dict:
+def parse_arguments(args_str: str, tool_name: str = "") -> dict:
     """Parse tool arguments from string format."""
     import re
     args = {}
     
-    # Try: "name1", "value1", "name2", "value2"
-    pattern = r'["\']([^"\']+)["\']\s*,\s*["\']([^"\']+)["\']'
+    # Clean up the string
+    args_str = args_str.strip()
+    
+    # Try: screen_resume["Lê Văn C", "Frontend Developer"]
+    # Extract quoted values directly
+    pattern = r'["\']([^"\']+)["\']'
     matches = re.findall(pattern, args_str)
     
-    if len(matches) >= 2:
-        for name, value in matches[:4]:  # Max 4 args
-            # Map common names to parameter names
-            if 'candidate' in name.lower():
-                args['candidate_name'] = value
-            elif 'position' in name.lower():
-                args['position'] = value
-            elif 'interviewer' in name.lower():
-                args['interviewer'] = value
-            elif 'date' in name.lower():
-                args['date'] = value
-            elif 'time' in name.lower():
-                args['time'] = value
-    
-    # If still empty, try positional
-    if not args:
-        parts = [p.strip().strip('"\'') for p in args_str.split(',')]
-        if len(parts) >= 2:
-            if 'screen' in args_str.lower():
-                args['candidate_name'] = parts[0]
-                args['position'] = parts[1]
-            elif 'check' in args_str.lower():
-                args['interviewer'] = parts[0]
-                args['date'] = parts[1]
-            elif 'schedule' in args_str.lower():
-                args['candidate_name'] = parts[0]
+    if matches:
+        parts = [m.strip() for m in matches]
+        
+        # screen_resume: candidate_name, position (2 args)
+        if tool_name == "screen_resume" and len(parts) >= 2:
+            args['candidate_name'] = parts[0]
+            args['position'] = parts[1]
+        
+        # check_interviewer_availability: interviewer, date (2 args)
+        elif tool_name == "check_interviewer_availability" and len(parts) >= 2:
+            args['interviewer'] = parts[0]
+            args['date'] = parts[1]
+        
+        # schedule_interview: candidate, interviewer, date, time (4 args)
+        elif tool_name == "schedule_interview" and len(parts) >= 4:
+            args['candidate_name'] = parts[0]
+            args['interviewer'] = parts[1]
+            args['date'] = parts[2]
+            args['time'] = parts[3]
+        
+        # Fallback: detect tool from args_str content
+        elif "screen" in args_str.lower() and len(parts) >= 2:
+            args['candidate_name'] = parts[0]
+            args['position'] = parts[1]
+        elif "check" in args_str.lower() and len(parts) >= 2:
+            args['interviewer'] = parts[0]
+            args['date'] = parts[1]
+        elif "schedule" in args_str.lower() and len(parts) >= 2:
+            args['candidate_name'] = parts[0]
+            if len(parts) >= 2:
                 args['interviewer'] = parts[1]
+            if len(parts) >= 3:
                 args['date'] = parts[2]
-                args['time'] = parts[3] if len(parts) > 3 else "09:00"
+            if len(parts) >= 4:
+                args['time'] = parts[3]
     
     return args
 
@@ -329,10 +323,10 @@ if __name__ == "__main__":
     react_results = []
     
     for i, test in enumerate(tests):
-        # Skip test case 5 for ReAct demo (it's edge case)
-        if test['id'] == 5:
-            print(f"\nTest Case #{test['id']} - [{test['category']}] - Skip for ReAct demo")
-            continue
+        # Test ALL cases including edge case #5
+        # if test['id'] == 5:
+        #     print(f"\nTest Case #{test['id']} - [{test['category']}] - Skip for ReAct demo")
+        #     continue
             
         print(f"\n{'='*60}")
         print(f"Test Case #{test['id']} - [{test['category']}]")
