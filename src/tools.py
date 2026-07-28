@@ -10,23 +10,62 @@ Không tool nào được phép ném Exception làm sập vòng lặp ReAct củ
 
 import datetime
 import functools
+import json
+from pathlib import Path
 
 # ============================================================
 # 📦 MOCK DATA (Giả lập cơ sở dữ liệu tuyển dụng)
 # ============================================================
 
-# Hồ sơ ứng viên: kỹ năng & số năm kinh nghiệm
-CANDIDATES_DB = {
-    "nguyễn văn a": {"skills": ["python", "sql", "machine learning"], "experience_years": 3},
-    "trần thị b": {"skills": ["java", "spring boot", "docker"], "experience_years": 5},
-    "lê văn c": {"skills": ["react", "javascript", "css"], "experience_years": 1},
-}
+def _load_candidates() -> dict:
+    """Đọc dữ liệu ứng viên mẫu từ config/candidates.json."""
+    data_path = Path(__file__).resolve().parent.parent / "config" / "candidates.json"
+    with data_path.open("r", encoding="utf-8") as file:
+        records = json.load(file)
+
+    return {
+        record["name"].strip().lower(): {
+            key: value
+            for key, value in record.items()
+            if key != "name"
+        }
+        for record in records
+    }
+
+
+# Hồ sơ ứng viên được lập chỉ mục theo tên để tool tra cứu nhanh.
+CANDIDATES_DB = _load_candidates()
 
 # Yêu cầu kỹ năng theo vị trí tuyển dụng
 POSITIONS_DB = {
     "data engineer": {"required_skills": ["python", "sql"], "min_experience": 2},
     "backend developer": {"required_skills": ["java", "spring boot"], "min_experience": 3},
     "frontend developer": {"required_skills": ["react", "javascript"], "min_experience": 2},
+    "devops engineer": {
+        "required_skills": ["docker", "kubernetes", "terraform"],
+        "min_experience": 3,
+    },
+    "ai engineer": {
+        "required_skills": ["python", "machine learning", "pytorch"],
+        "min_experience": 2,
+    },
+    "qa automation engineer": {
+        "required_skills": ["python", "selenium", "postman"],
+        "min_experience": 2,
+    },
+    ".net developer": {
+        "required_skills": ["c#", "asp.net core", "sql server"],
+        "min_experience": 3,
+    },
+    "mobile developer": {
+        "required_skills": ["flutter", "dart", "firebase"],
+        "min_experience": 2,
+    },
+    "node.js developer": {
+        "required_skills": ["node.js", "typescript", "express"],
+        "min_experience": 2,
+    },
+    "bi analyst": {"required_skills": ["sql", "power bi", "excel"], "min_experience": 2},
 }
 
 # Lịch bận của người phỏng vấn: {tên: {ngày: [khung giờ đã bận]}}
