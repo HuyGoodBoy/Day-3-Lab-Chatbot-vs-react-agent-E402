@@ -147,3 +147,47 @@ AVAILABLE_TOOLS = {
     "check_interviewer_availability": check_interviewer_availability,
     "schedule_interview": schedule_interview,
 }
+
+
+# ============================================================
+# 📑 TOOL SPECS (Mô tả chuẩn hóa - dùng để nhúng vào REACT_SYSTEM_PROMPT)
+# ============================================================
+
+TOOL_SPECS = [
+    {
+        "name": "screen_resume",
+        "description": (
+            "Sàng lọc & chấm điểm mức độ phù hợp giữa hồ sơ ứng viên và vị trí tuyển dụng. "
+            "Dùng khi cần biết một ứng viên cụ thể có ĐẠT yêu cầu của một vị trí cụ thể hay không."
+        ),
+        "parameters": {
+            "candidate_name": "str - Tên ứng viên (Ví dụ: 'Nguyễn Văn A')",
+            "position": "str - Tên vị trí tuyển dụng (Ví dụ: 'Data Engineer')",
+        },
+    },
+    {
+        "name": "check_interviewer_availability",
+        "description": (
+            "Tra cứu các khung giờ còn trống của một người phỏng vấn trong một ngày cụ thể. "
+            "Dùng trước khi đặt lịch để biết còn giờ trống hay không."
+        ),
+        "parameters": {
+            "interviewer": "str - Tên người phỏng vấn (Ví dụ: 'Chị Hương (HR)')",
+            "date": "str - Ngày cần kiểm tra, định dạng YYYY-MM-DD",
+        },
+    },
+    {
+        "name": "schedule_interview",
+        "description": (
+            "Đặt lịch phỏng vấn cho ứng viên với người phỏng vấn vào một ngày/giờ cụ thể. "
+            "Chỉ nên gọi sau khi đã xác nhận ứng viên ĐẠT (qua screen_resume) và khung giờ còn trống "
+            "(qua check_interviewer_availability)."
+        ),
+        "parameters": {
+            "candidate_name": "str - Tên ứng viên",
+            "interviewer": "str - Tên người phỏng vấn",
+            "date": "str - Ngày phỏng vấn, định dạng YYYY-MM-DD",
+            "time": "str - Giờ phỏng vấn, định dạng HH:MM (Ví dụ: '09:00')",
+        },
+    },
+]
