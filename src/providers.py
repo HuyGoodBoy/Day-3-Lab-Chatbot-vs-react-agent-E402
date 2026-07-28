@@ -28,7 +28,7 @@ class GeminiProvider(BaseLLMProvider):
     """Google Gemini Provider"""
     def __init__(self, api_key: str = None, model: str = None):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        self.model_name = model or os.getenv("LLM_MODEL") or "gemini-2.5-flash"
+        self.model_name = model or os.getenv("LLM_MODEL") or "gemini-2.5-flash-lite"
         
     def generate(self, prompt: str, system_prompt: str = "") -> str:
         if not self.api_key or self.api_key == "your_gemini_api_key_here":
@@ -159,6 +159,7 @@ def get_llm_provider(provider_name: str = None) -> BaseLLMProvider:
 if __name__ == "__main__":
     print("=== TEST MULTI-PROVIDER LLM ADAPTER ===")
     provider = get_llm_provider()
-    print(f"✅ Provider đang dùng: {provider.__class__.__name__}")
+    model_name = getattr(provider, "model_name", "Offline Mock Mode")
+    print(f"✅ Provider đang dùng: {provider.__class__.__name__} (Model: {model_name})")
     print(f"🤖 User Query: Hello")
     print(f"💬 Response  : {provider.generate('Hello')}")
