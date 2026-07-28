@@ -19,7 +19,7 @@ if sys.stdout.encoding != 'utf-8':
         pass
 
 # Import các thành phần từ file của Role 2, Role 3 & Multi-Provider Adapter
-from tools import AVAILABLE_TOOLS, get_weather, search_flights
+from tools import AVAILABLE_TOOLS, screen_resume, check_interviewer_availability, schedule_interview
 from prompts import CHATBOT_BASELINE_PROMPT, REACT_SYSTEM_PROMPT, MAX_ITERATIONS
 from providers import get_llm_provider
 
@@ -62,16 +62,22 @@ def run_react_agent(user_query: str, provider):
         print(f"\n--- 🔄 Vòng lặp ReAct (Step {step}/{MAX_ITERATIONS}) ---")
         
         if step == 1:
-            print("🧠 Thought: Câu hỏi này cần tra cứu thời tiết thời gian thực.")
-            print("🛠️ Action: get_weather['Hà Nội']")
-            
+            print("🧠 Thought: Cần sàng lọc hồ sơ ứng viên trước khi quyết định đặt lịch phỏng vấn.")
+            print("🛠️ Action: screen_resume['Trần Thị B', 'Backend Developer']")
+
             # Thực thi tool
-            obs = get_weather("Hà Nội")
+            obs = screen_resume("Trần Thị B", "Backend Developer")
             print(f"👁️ Observation: {obs}")
-            
+
         elif step == 2:
-            print("🧠 Thought: Tôi đã có thông tin thời tiết Hà Nội, giờ tôi có thể tư vấn trang phục.")
-            print("🏁 Final Answer: Thời tiết Hà Nội hôm nay 28°C, nắng nhẹ. Bạn nên mặc áo phông thoáng mát!")
+            print("🧠 Thought: Ứng viên ĐẠT yêu cầu, tiến hành đặt lịch phỏng vấn.")
+            print("🛠️ Action: schedule_interview['Trần Thị B', 'Anh Minh (Tech Lead)', '2026-08-01', '13:00']")
+
+            obs = schedule_interview("Trần Thị B", "Anh Minh (Tech Lead)", "2026-08-01", "13:00")
+            print(f"👁️ Observation: {obs}")
+
+            print("🧠 Thought: Tôi đã có đủ thông tin sàng lọc và xác nhận lịch phỏng vấn.")
+            print("🏁 Final Answer: Trần Thị B ĐẠT yêu cầu vị trí Backend Developer và đã được đặt lịch phỏng vấn với Anh Minh (Tech Lead) lúc 13:00 ngày 2026-08-01.")
             break
             
     if step >= MAX_ITERATIONS:
@@ -91,11 +97,8 @@ if __name__ == "__main__":
     tests = load_test_cases()
     print(f"✅ Đã tải thành công {len(tests)} Test Cases từ config/test_cases.json\n")
     
-    # Chạy thử câu test số 3
-    sample_query = tests[2]["question"]
-    
     print("--- DEMO 1: CHẠY TRÊN CHATBOT BASELINE ---")
-    run_baseline_chatbot(sample_query, provider)
-    
+    run_baseline_chatbot(tests[2]["question"], provider)  # Câu test 1-tool (id 3)
+
     print("\n--- DEMO 2: CHẠY TRÊN REACT AGENT ---")
-    run_react_agent(sample_query, provider)
+    run_react_agent(tests[3]["question"], provider)  # Câu test 2-tool (id 4)
